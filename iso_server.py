@@ -1,7 +1,6 @@
 import os
 from flask import Flask, send_file, abort, jsonify
 import pycdlib
-import subprocess
 
 app = Flask(__name__)
 
@@ -34,8 +33,10 @@ def list_iso_contents(iso_name):
         list_files("/")
         iso.close()
         return jsonify(files)
-    except Exception as e:
+    except pycdlib.pycdlibexception.PyCdlibException as e:
         abort(500, description=f"Error processing ISO file: {str(e)}")
+    except Exception as e:
+        abort(500, description=f"Unexpected error: {str(e)}")
 
 @app.route('/download/<iso_name>/<path:file_path>')
 def download_file(iso_name, file_path):
@@ -48,7 +49,7 @@ def download_file(iso_name, file_path):
         iso = pycdlib.PyCdlib()
         iso.open(iso_path)
 
-        extracted_path = f"/tmp/{iso_name}/{file_path}"
+        extracted_path = os.path.join("/tmp", iso_name, file_path)
         extracted_dir = os.path.dirname(extracted_path)
 
         os.makedirs(extracted_dir, exist_ok=True)
@@ -58,8 +59,10 @@ def download_file(iso_name, file_path):
             
         iso.close()
         return send_file(extracted_path, as_attachment=True)
-    except Exception as e:
+    except pycdlib.pycdlibexception.PyCdlibException as e:
         abort(500, description=f"Error extracting file: {str(e)}")
+    except Exception as e:
+        abort(500, description=f"Unexpected error: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
