@@ -45,18 +45,14 @@ def list_contents(iso_name, file_path):
 def list_contents_in_html(iso_name,file_path):
     files=list_iso_contents(iso_name,file_path)
     folder=file_path.replace('path:','')
-    head=f'<html><head><title>Index of {folder}</title></head><body>'
-    head+='<h1>ISO Directory Listing</h1>'
-    head+=f'<h2>{iso_name}</h2>'
-    head+=f'<h3>Index of {folder}</h3><hr/>'
-    body='<ul>'
+    head = f'''<html><head><title>Index of {folder}</title><style>body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }} .container {{ width: 80%; margin: auto; overflow: hidden; }} header {{ background: #333; color: #fff; padding-top: 30px; min-height: 70px; border-bottom: #77aaff 3px solid; }} header a {{ color: #fff; text-decoration: none; text-transform: uppercase; font-size: 16px; }} ul {{ list-style: none; padding: 0; }} ul li {{ background: #fff; margin: 5px 0; padding: 10px; border: #ccc 1px solid; }} ul li a {{ color: #333; text-decoration: none; }} ul li a:hover {{ color: #77aaff; }} hr {{ border: 0; height: 1px; background: #ccc; margin: 20px 0; }}</style></head><body><header><div class="container"><h1>ISO Directory Listing</h1></div></header><div class="container"><h2>{iso_name}</h2><h3>Index of {folder}</h3><hr/><ul>'''
+    body = ''
     for item in files:
         if folder != '/' or (folder == '/' and item['name'] not in ['../','./']):
-            path=item['path']
-            name=item['name']
-            body += f'<li><a href={path}>{name}</a></li>'
-    body+='</ul><hr />'
-    bottom='</body></html>'
+            path = item['path']
+            name = item['name']
+            body += f'<li><a href="{path}">{name}</a></li>'
+    bottom = '''</ul><hr /></div></body></html>'''
     return head+body+bottom
 
 @app.route('/download/<iso_name>/<path:file_path>')
