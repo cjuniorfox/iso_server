@@ -6,4 +6,4 @@ COPY . .
 ENV ISO_DIR=/isos
 VOLUME /isos
 EXPOSE 8000
-CMD ["python", "iso_server.py"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "iso_server:app"]
