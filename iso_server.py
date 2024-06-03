@@ -1,6 +1,7 @@
 import os
 from flask import Flask, send_file, abort, jsonify, request
 import pycdlib
+import subprocess
 
 app = Flask(__name__)
 ISO_DIR = os.environ.get('ISO_DIR')
@@ -22,7 +23,8 @@ def to_html(iso_name, files, file_path):
             kind = item['kind']
             fa_icon = 'fa-folder' if kind=='DIR' else 'fa-compact-disc'
             fa_icon = 'fa-file' if kind=='FILE' else fa_icon
-            body += f'<li><i class="fas {fa_icon} icon"></i> <a href="{path}">{name}</a></li>'
+            fa_icon = 'fa-turn-up' if kind=='UP' else fa_icon
+            body += f'<li><a href="{path}"><i class="fas {fa_icon} icon"></i> {name}</a></li>'
     bottom = '''</ul><hr /></div></body></html>'''
     return head + body + bottom
 
@@ -45,25 +47,57 @@ def list_iso_contents_dict(iso_name, path='/'):
     if not os.path.isfile(iso_path):
         abort(404, description="ISO file not found")
     try:
-        iso = pycdlib.PyCdlib()
-        iso.open(iso_path)
-        files = []
-        path = path.replace("path:", "").upper()
-        try:
-            for child in iso.list_children(iso_path=os.path.join(path)):
-                child_name = child.file_identifier().decode('utf-8')
-                method='download' if child.is_file() else 'html'
-                files.append({
-                    'path': os.path.join(CONTEXT, method, iso_name) + '/path:' + os.path.join(path, child_name.lower().replace(';1', '')),
-                    'name': child_name.lower().replace(';1', '') + ('' if child.is_file() else '/'),
-                    'kind':'FILE' if child.is_file() else 'DIR'
-                })
-        except pycdlib.pycdlibexception.PyCdlibInvalidInput as e:
-            print(str(e))
-        iso.close()
+        files=[]
+        cmd = ['7z','l',iso_path]
+        iso = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output= iso.stdout.split('\n')
+        path = path.replace("path:", "")
+        last_dir = ''
+        files_buffer=False
+        if path not in ['','/']:
+            files.append({
+                'path': os.path.join(CONTEXT, 'html',iso_name) + '/path:' + path+'..',
+                'name': 'Up one directory',
+                'kind':'UP'
+            })
+        else :
+            files.append({
+                'path': os.path.join(CONTEXT, 'html'),
+                'name': 'ISO Directory Listing',
+                'kind':'UP'
+            })
+        for child in output:
+            if child.startswith('------'):
+                files_buffer=True
+            values=child.split()
+            if len(values) == 6 and files_buffer:
+                full_path=os.path.join('/',values[5])
+                name=os.path.basename(values[5])
+                dir_name = os.path.dirname(full_path)
+                path_look = os.path.join('/',path)
+                len_look_dir=len(path_look.split('/'))-1
+                #add dirs
+                if dir_name.startswith(path_look):
+                    split_dir=dir_name.split('/')
+                    if(len(split_dir) > len_look_dir ):
+                        dir_name_split = dir_name.split('/')
+                        subdir=dir_name_split[len_look_dir]
+                        if subdir != last_dir and subdir != '' and subdir != None:
+                            last_dir = subdir
+                            files.append({
+                                'path': os.path.join(CONTEXT, 'html',iso_name) + '/path:' + os.path.join(path_look,subdir+'/'),
+                                'name': subdir,
+                                'kind':'DIR'
+                            })
+
+                #add files    
+                if dir_name == path_look or dir_name == path_look.removesuffix('/'):
+                    files.append({
+                            'path': os.path.join(CONTEXT, 'download', iso_name) + '/path:' + full_path,
+                            'name': name,
+                            'kind':'FILE'
+                        })
         return files
-    except pycdlib.pycdlibexception.PyCdlibException as e:
-        abort(500, description=f"Error processing ISO file: {str(e)}")
     except Exception as e:
         abort(500, description=f"Unexpected error: {str(e)}")
 
