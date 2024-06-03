@@ -6,4 +6,5 @@ COPY . .
 ENV ISO_DIR=/isos
 VOLUME /isos
 EXPOSE 8000
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "iso_server:app"]
+ENV FLASK_APP=iso_server.py
+CMD ["flask", "run", "--host=0.0.0.0", "--port=8000"]
