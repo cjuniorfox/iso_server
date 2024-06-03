@@ -8,7 +8,10 @@ from flask import Flask, send_file, abort, jsonify, after_this_request
 app = Flask(__name__)
 ISO_DIR = os.environ.get('ISO_DIR', '/home/junior/Downloads/isos')
 CONTEXT = os.environ.get('CONTEXT', '/ipxe/isos/')
-EXTRACT_DIR = os.environ.get('EXTRACT_DIR','/tmp/iso_server')
+EXTRACT_DIR = os.environ.get('EXTRACT_DIR', '/tmp/iso_server')
+
+# Ensure EXTRACT_DIR exists
+os.makedirs(EXTRACT_DIR, exist_ok=True)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -143,12 +146,12 @@ def download_file(iso_name, file_path):
         abort(404, description="ISO file not found")
     try:
         file_path = file_path.replace('path:', '').lstrip('/')
-        unique_id=uuid.uuid4()
-        unique_path=os.path.join(EXTRACT_DIR,str(unique_id))
+        unique_id = uuid.uuid4()
+        unique_path = os.path.join(EXTRACT_DIR, str(unique_id))
         extracted_path = os.path.join(unique_path, os.path.basename(file_path))
         extracted_dir = os.path.dirname(extracted_path)
         os.makedirs(extracted_dir, exist_ok=True)
-        cmd = ['7z', 'e', iso_path, f'-o{extracted_dir}', file_path,'-y']
+        cmd = ['7z', 'e', iso_path, f'-o{extracted_dir}', file_path, '-y']
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
             abort(500, description=f"Error extracting file: {result.stderr}")
