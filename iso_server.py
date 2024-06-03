@@ -6,8 +6,8 @@ import shutil
 from flask import Flask, send_file, abort, jsonify, after_this_request
 
 app = Flask(__name__)
-ISO_DIR = os.environ.get('ISO_DIR', '/home/junior/Downloads/isos')
-CONTEXT = os.environ.get('CONTEXT', '/ipxe/isos/')
+ISO_DIR = os.environ.get('ISO_DIR', '/isos')
+CONTEXT = os.environ.get('CONTEXT', '/')
 EXTRACT_DIR = os.environ.get('EXTRACT_DIR', '/tmp/iso_server')
 
 # Ensure EXTRACT_DIR exists
