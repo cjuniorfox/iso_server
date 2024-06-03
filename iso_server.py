@@ -18,7 +18,7 @@ def to_dict(method, name, kind, iso_name, full_path=''):
     else:
         path = os.path.join(CONTEXT, method, iso_name)
     if kind not in ['FILE', 'DIR', 'BACK', 'ISO']:
-        raise ValueError(f'Kind must be FILE, DIR or UP, but is {kind}')
+        raise ValueError(f'Kind must be FILE, DIR, BACK, or ISO, but is {kind}')
     return { 'path': path, 'name': name, 'kind': kind }
 
 def to_html(iso_name, files, file_path):
@@ -156,6 +156,13 @@ def download_file(iso_name, file_path):
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         abort(500, description=f"Unexpected error: {str(e)}")
+
+@app.route(f'{CONTEXT}download/<file_name>')
+def download_iso(file_name):
+    iso_path = os.path.join(ISO_DIR, file_name )
+    if not os.path.isfile(iso_path):
+        abort(404, description="ISO file not found")
+    return send_file(iso_path, as_attachment=True)
 
 @app.route(f'{CONTEXT}json/')
 def list_isos():
