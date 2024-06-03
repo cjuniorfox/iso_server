@@ -53,68 +53,71 @@ def list_iso_contents_dict(iso_name, path='/'):
     
     try:
         files = []
-        cmd = ['7z', 'l', iso_path]
-        iso = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        output = iso.stdout.split('\n')
-        
+        output = run_7z_command(iso_path)
         path = path.replace("path:", "")
-        last_dir = ''
         files_buffer = False
-        
-        # Add the "Up one directory" link
-        if path not in ['', '/']:
-            files.append(to_dict(
-                os.path.join(CONTEXT, 'html', iso_name) + '/path:' + path + '..',
-                'Up one directory',
-                'BACK'
-            ))
-        else:
-            files.append(to_dict(
-                os.path.join(CONTEXT, 'html'),
-                'ISO Directory Listing',
-                'BACK'
-            ))
-        
+        add_up_directory_link(files, iso_name, path)
+
         for line in output:
             if line.startswith('------'):
                 files_buffer = True
                 continue
-            
             if files_buffer:
-                values = line.split()
-                if len(values) == 6:
-                    full_path = os.path.join('/', values[5])
-                    name = os.path.basename(values[5])
-                    dir_name = os.path.dirname(full_path)
-                    path_look = os.path.join('/', path)
-                    len_look_dir = len(path_look.split('/')) - 1
-                    
-                    # Add directories
-                    if dir_name.startswith(path_look):
-                        split_dir = dir_name.split('/')
-                        if len(split_dir) > len_look_dir:
-                            subdir = split_dir[len_look_dir]
-                            if subdir and subdir != last_dir:
-                                last_dir = subdir
-                                files.append(to_dict(
-                                    os.path.join(CONTEXT, 'html', iso_name) + '/path:' + os.path.join(path_look, subdir + '/'),
-                                    subdir,
-                                    'DIR'
-                                ))
-                    
-                    # Add files
-                    if dir_name == path_look or dir_name == path_look.rstrip('/'):
-                        files.append(to_dict(
-                            os.path.join(CONTEXT, 'download', iso_name) + '/path:' + full_path,
-                            name,
-                            'FILE'
-                        ))
+                
+                process_line(line,files,iso_name,path)
+                
         files = sorted(files, key=lambda x: x['kind'])
         return files
     except subprocess.CalledProcessError as e:
         abort(500, description=f"Error running 7z command: {str(e)}")
     except Exception as e:
         abort(500, description=f"Unexpected error: {str(e)}")
+
+def run_7z_command(iso_path):
+    cmd = ['7z', 'l', iso_path]
+    iso = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return iso.stdout.split('\n')
+
+def add_up_directory_link(files, iso_name, path):
+    if path not in ['', '/']:
+        files.append(to_dict(
+            os.path.join(CONTEXT, 'html', iso_name) + '/path:' + path + '..',
+            'Up one directory', 'BACK'
+        ))
+    else:
+        files.append(to_dict(
+            os.path.join(CONTEXT, 'html'),
+            'ISO Directory Listing', 'BACK'
+        ))
+
+def add_files(files, iso_name, path_look, dir_name, full_path, name):
+    if dir_name == path_look or dir_name == path_look.rstrip('/'):
+        files.append(to_dict(
+            os.path.join(CONTEXT, 'download', iso_name) + '/path:' + full_path,
+            name, 'FILE'
+        ))
+def process_line(line, files, iso_name, path):
+    values = line.split()
+    if len(values) == 6:
+        full_path = os.path.join('/', values[5])
+        name = os.path.basename(values[5])
+        dir_name = os.path.dirname(full_path)
+        path_look = os.path.join('/', path)
+        add_dirs(files,path_look,dir_name,iso_name)
+        add_files(files, iso_name, path_look, dir_name, full_path, name)
+
+def add_dirs(files,path_look,dir_name,iso_name):
+    len_look_dir = len(path_look.split('/')) - 1
+    if dir_name.startswith(path_look):
+        split_dir = dir_name.split('/')
+        if len(split_dir) > len_look_dir:
+            subdir = split_dir[len_look_dir]
+            if subdir and subdir != files[-1]['name']:
+                files.append(to_dict(
+                    os.path.join(CONTEXT, 'html', iso_name) + '/path:' + os.path.join(path_look, subdir + '/'),
+                    subdir,
+                    'DIR'
+                ))
 
 @app.route(f'{CONTEXT}json/<iso_name>')
 def list_root_contents(iso_name):
