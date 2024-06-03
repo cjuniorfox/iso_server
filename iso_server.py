@@ -1,17 +1,12 @@
 import os
 import subprocess
 import logging
-import uuid
-import shutil
-from flask import Flask, send_file, abort, jsonify, after_this_request
+from flask import Flask, send_file, abort, jsonify, Response
 
 app = Flask(__name__)
+
 ISO_DIR = os.environ.get('ISO_DIR', '/isos')
 CONTEXT = os.environ.get('CONTEXT', '/')
-EXTRACT_DIR = os.environ.get('EXTRACT_DIR', '/tmp/iso_server')
-
-# Ensure EXTRACT_DIR exists
-os.makedirs(EXTRACT_DIR, exist_ok=True)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,11 +19,7 @@ def to_dict(method, name, kind, iso_name, full_path=''):
         path = os.path.join(CONTEXT, method, iso_name)
     if kind not in ['FILE', 'DIR', 'BACK', 'ISO']:
         raise ValueError(f'Kind must be FILE, DIR or UP, but is {kind}')
-    return {
-        'path': path,
-        'name': name,
-        'kind': kind
-    }
+    return { 'path': path, 'name': name, 'kind': kind }
 
 def to_html(iso_name, files, file_path):
     folder = file_path.replace('path:', '')
@@ -54,7 +45,7 @@ def list_isos_as_dict():
         for f in os.listdir(ISO_DIR):
             if f.endswith('.iso'):
                 iso_name = f.removesuffix('.iso')
-                files.append(to_dict('html', f, 'ISO', iso_name))
+                files.append(to_dict('html', f, 'ISO', iso_name, '/'))
         return files
     except Exception as e:
         logger.error(f"Error listing ISO files: {str(e)}")
@@ -64,7 +55,6 @@ def list_iso_contents_dict(iso_name, path='/'):
     iso_path = os.path.join(ISO_DIR, iso_name + ".iso")
     if not os.path.isfile(iso_path):
         abort(404, description="ISO file not found")
-    
     try:
         files = []
         output = run_7z_command(iso_path)
@@ -146,24 +136,23 @@ def download_file(iso_name, file_path):
         abort(404, description="ISO file not found")
     try:
         file_path = file_path.replace('path:', '').lstrip('/')
-        unique_id = uuid.uuid4()
-        unique_path = os.path.join(EXTRACT_DIR, str(unique_id))
-        extracted_path = os.path.join(unique_path, os.path.basename(file_path))
-        extracted_dir = os.path.dirname(extracted_path)
-        os.makedirs(extracted_dir, exist_ok=True)
-        cmd = ['7z', 'e', iso_path, f'-o{extracted_dir}', file_path, '-y']
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if result.returncode != 0:
-            abort(500, description=f"Error extracting file: {result.stderr}")
-        @after_this_request
-        def remove_file(response):
+        cmd = ['7z', 'e', '-so', iso_path, file_path]
+        result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        def generate():
+            chunk_size = 8192  # Increase chunk size to 8 KB
             try:
-                shutil.rmtree(unique_path)
-                logger.info(f"Deleted path: {unique_path}")
+                for chunk in iter(lambda: result.stdout.read(chunk_size), b''):
+                    yield chunk
+                result.stdout.close()
+                result.wait()
+                if result.returncode != 0:
+                    raise subprocess.CalledProcessError(result.returncode, cmd, output=result.stdout, stderr=result.stderr)
             except Exception as e:
-                logger.error(f"Error deleting path: {str(e)}")
-            return response
-        return send_file(extracted_path, as_attachment=True)
+                logger.error(f"Error streaming file: {str(e)}")
+                abort(500, description=f"Error streaming file: {str(e)}")
+
+        return Response(generate(), content_type='application/octet-stream')
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         abort(500, description=f"Unexpected error: {str(e)}")
