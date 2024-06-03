@@ -1,15 +1,17 @@
 import os
-from flask import Flask, send_file, abort, jsonify
 import subprocess
+import logging
+from flask import Flask, send_file, abort, jsonify
 
 app = Flask(__name__)
-ISO_DIR = os.environ.get('ISO_DIR')
-CONTEXT = os.environ.get('CONTEXT')
+ISO_DIR = os.environ.get('ISO_DIR', '/home/junior/Downloads/isos')
+CONTEXT = os.environ.get('CONTEXT', '/ipxe/isos/')
 
-CONTEXT = CONTEXT if CONTEXT != None else '/ipxe/isos/'
-ISO_DIR = ISO_DIR if ISO_DIR != None else '/home/junior/Downloads/isos'
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def to_dict(method, name, kind, iso_name, full_path = ''):
+def to_dict(method, name, kind, iso_name, full_path=''):
     if full_path:
         path = os.path.join(CONTEXT, method, iso_name) + '/path:' + full_path
     else:
@@ -45,10 +47,11 @@ def list_isos_as_dict():
     try:
         for f in os.listdir(ISO_DIR):
             if f.endswith('.iso'):
-                iso_name=f.removesuffix('.iso')
-                files.append(to_dict('html',f,'ISO',iso_name))
+                iso_name = f.removesuffix('.iso')
+                files.append(to_dict('html', f, 'ISO', iso_name))
         return files
     except Exception as e:
+        logger.error(f"Error listing ISO files: {str(e)}")
         abort(500, description=f"Error listing ISO files: {str(e)}")
 
 def list_iso_contents_dict(iso_name, path='/'):
@@ -67,12 +70,14 @@ def list_iso_contents_dict(iso_name, path='/'):
                 files_buffer = True
                 continue
             if files_buffer:
-                process_line(line,files,iso_name,path)
+                process_line(line, files, iso_name, path)
         files = sorted(files, key=lambda x: x['kind'])
         return files
     except subprocess.CalledProcessError as e:
+        logger.error(f"Error running 7z command: {str(e)}")
         abort(500, description=f"Error running 7z command: {str(e)}")
     except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
         abort(500, description=f"Unexpected error: {str(e)}")
 
 def run_7z_command(iso_path):
@@ -82,14 +87,14 @@ def run_7z_command(iso_path):
 
 def add_up_directory_link(files, iso_name, path):
     if path not in ['', '/']:
-        full_path=os.path.join(path,'..')
-        files.append(to_dict('html','Up one Directory','BACK',iso_name,full_path))
+        full_path = os.path.join(path, '..')
+        files.append(to_dict('html', 'Up one Directory', 'BACK', iso_name, full_path))
     else:
-        files.append(to_dict('html','ISO Directory Listing','BACK',''))
+        files.append(to_dict('html', 'ISO Directory Listing', 'BACK', ''))
 
 def add_files(files, iso_name, path_look, dir_name, full_path, name):
     if dir_name == path_look or dir_name == path_look.rstrip('/'):
-        files.append(to_dict('download',name,'FILE',iso_name,full_path))
+        files.append(to_dict('download', name, 'FILE', iso_name, full_path))
 
 def process_line(line, files, iso_name, path):
     values = line.split()
@@ -98,18 +103,18 @@ def process_line(line, files, iso_name, path):
         name = os.path.basename(values[5])
         dir_name = os.path.dirname(full_path)
         path_look = os.path.join('/', path)
-        add_dirs(files,path_look,dir_name,iso_name)
+        add_dirs(files, path_look, dir_name, iso_name)
         add_files(files, iso_name, path_look, dir_name, full_path, name)
 
-def add_dirs(files,path_look,dir_name,iso_name):
+def add_dirs(files, path_look, dir_name, iso_name):
     len_look_dir = len(path_look.split('/')) - 1
     if dir_name.startswith(path_look):
         split_dir = dir_name.split('/')
         if len(split_dir) > len_look_dir:
             subdir = split_dir[len_look_dir]
             if subdir and subdir != files[-1]['name']:
-                full_path=os.path.join(path_look, subdir + '/')
-                files.append(to_dict('html',subdir,'DIR',iso_name,full_path))
+                full_path = os.path.join(path_look, subdir + '/')
+                files.append(to_dict('html', subdir, 'DIR', iso_name, full_path))
 
 @app.route(f'{CONTEXT}json/<iso_name>')
 def list_root_contents(iso_name):
@@ -144,6 +149,7 @@ def download_file(iso_name, file_path):
             abort(500, description=f"Error extracting file: {result.stderr}")
         return send_file(extracted_path, as_attachment=True)
     except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
         abort(500, description=f"Unexpected error: {str(e)}")
 
 @app.route(f'{CONTEXT}json/')
@@ -155,6 +161,6 @@ def list_isos_as_html():
     return to_html('root', list_isos_as_dict(), 'ISOS')
 
 if __name__ == '__main__':
-    print(f' * ISO Directory: "{ISO_DIR}"')
-    print(f' * Context Path: "{CONTEXT}"')
+    logger.info(f' * ISO Directory: "{ISO_DIR}"')
+    logger.info(f' * Context Path: "{CONTEXT}"')
     app.run(host='0.0.0.0', port=8000)
