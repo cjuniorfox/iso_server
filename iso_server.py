@@ -47,7 +47,6 @@ def list_iso_contents_dict(iso_name, path='/'):
     try:
         iso = pycdlib.PyCdlib()
         iso.open(iso_path)
-        iso.udf_read()
         files = []
         path = path.replace("path:", "").upper()
         try:
