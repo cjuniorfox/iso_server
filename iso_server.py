@@ -9,7 +9,11 @@ CONTEXT = os.environ.get('CONTEXT')
 CONTEXT = CONTEXT if CONTEXT != None else '/ipxe/isos/'
 ISO_DIR = ISO_DIR if ISO_DIR != None else '/home/junior/Downloads/isos'
 
-def to_dict(path, name, kind):
+def to_dict(method, name, kind, iso_name, full_path = ''):
+    if full_path:
+        path = os.path.join(CONTEXT, method, iso_name) + '/path:' + full_path
+    else:
+        path = os.path.join(CONTEXT, method, iso_name)
     if kind not in ['FILE', 'DIR', 'BACK', 'ISO']:
         raise ValueError(f'Kind must be FILE, DIR or UP, but is {kind}')
     return {
@@ -41,7 +45,8 @@ def list_isos_as_dict():
     try:
         for f in os.listdir(ISO_DIR):
             if f.endswith('.iso'):
-                files.append(to_dict(f'''{CONTEXT}html/{f.removesuffix('.iso')}''', f, 'ISO'))
+                iso_name=f.removesuffix('.iso')
+                files.append(to_dict('html',f,'ISO',iso_name))
         return files
     except Exception as e:
         abort(500, description=f"Error listing ISO files: {str(e)}")
@@ -57,15 +62,12 @@ def list_iso_contents_dict(iso_name, path='/'):
         path = path.replace("path:", "")
         files_buffer = False
         add_up_directory_link(files, iso_name, path)
-
         for line in output:
             if line.startswith('------'):
                 files_buffer = True
                 continue
             if files_buffer:
-                
                 process_line(line,files,iso_name,path)
-                
         files = sorted(files, key=lambda x: x['kind'])
         return files
     except subprocess.CalledProcessError as e:
@@ -80,22 +82,15 @@ def run_7z_command(iso_path):
 
 def add_up_directory_link(files, iso_name, path):
     if path not in ['', '/']:
-        files.append(to_dict(
-            os.path.join(CONTEXT, 'html', iso_name) + '/path:' + path + '..',
-            'Up one directory', 'BACK'
-        ))
+        full_path=os.path.join(path,'..')
+        files.append(to_dict('html','Up one Directory','BACK',iso_name,full_path))
     else:
-        files.append(to_dict(
-            os.path.join(CONTEXT, 'html'),
-            'ISO Directory Listing', 'BACK'
-        ))
+        files.append(to_dict('html','ISO Directory Listing','BACK',''))
 
 def add_files(files, iso_name, path_look, dir_name, full_path, name):
     if dir_name == path_look or dir_name == path_look.rstrip('/'):
-        files.append(to_dict(
-            os.path.join(CONTEXT, 'download', iso_name) + '/path:' + full_path,
-            name, 'FILE'
-        ))
+        files.append(to_dict('download',name,'FILE',iso_name,full_path))
+
 def process_line(line, files, iso_name, path):
     values = line.split()
     if len(values) == 6:
@@ -113,11 +108,8 @@ def add_dirs(files,path_look,dir_name,iso_name):
         if len(split_dir) > len_look_dir:
             subdir = split_dir[len_look_dir]
             if subdir and subdir != files[-1]['name']:
-                files.append(to_dict(
-                    os.path.join(CONTEXT, 'html', iso_name) + '/path:' + os.path.join(path_look, subdir + '/'),
-                    subdir,
-                    'DIR'
-                ))
+                full_path=os.path.join(path_look, subdir + '/')
+                files.append(to_dict('html',subdir,'DIR',iso_name,full_path))
 
 @app.route(f'{CONTEXT}json/<iso_name>')
 def list_root_contents(iso_name):
