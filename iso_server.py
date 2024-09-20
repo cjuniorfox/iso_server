@@ -121,7 +121,7 @@ def add_up_directory_link(files, iso_name, path):
         iso_fs_path = os.path.join(path, '..')
         files.append(to_dict('html', 'Up one Directory', 'BACK', iso_name, iso_fs_path))
     else:
-        files.append(to_dict('html', 'ISO Directory Listing', 'BACK', ''))
+        files.append(to_dict('html', 'ISO Directory Listing', 'BACK', iso_name, '..'))
 
 def add_files(files, iso_name, path_look, dir_name, iso_fs_path, name):
     if dir_name == path_look or dir_name == path_look.rstrip('/'):
