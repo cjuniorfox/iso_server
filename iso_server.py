@@ -16,7 +16,7 @@ def to_dict(method, name, kind, iso_name, full_path=''):
     if full_path:
         path = os.path.join(CONTEXT, method, iso_name) + '/' + full_path.lstrip('/')
     else:
-        path = os.path.join(CONTEXT, method, iso_name)
+        path = os.path.join(CONTEXT, method, iso_name + '/')
 
     # Add download link for ISO files
     download_link = os.path.join(CONTEXT, 'download', iso_name + '.iso') if kind == 'ISO' else None
@@ -147,7 +147,7 @@ def add_dirs(files, path_look, dir_name, iso_name):
                 iso_fs_path = os.path.join(path_look, subdir + '/')
                 files.append(to_dict('html', subdir, 'DIR', iso_name, iso_fs_path))
 
-@app.route(f'{CONTEXT}json/<iso_name>')
+@app.route(f'{CONTEXT}json/<iso_name>/')
 def list_root_contents(iso_name):
     return jsonify(list_iso_contents_dict(iso_name, '/'))
 
