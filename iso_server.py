@@ -1,7 +1,7 @@
 import os
 import subprocess
 import logging
-from flask import Flask, send_file, abort, jsonify, Response
+from flask import Flask, send_file, abort, jsonify, Response, redirect
 
 app = Flask(__name__)
 
@@ -12,20 +12,42 @@ CONTEXT = os.environ.get('CONTEXT', '/')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def to_dict(method, name, kind, iso_name, iso_fs_path=''):
-    if iso_fs_path:
-        path = os.path.join(CONTEXT, method, iso_name) + '/path:' + iso_fs_path
+def to_dict(method, name, kind, iso_name, full_path=''):
+    if full_path:
+        path = os.path.join(CONTEXT, method, iso_name) + '/' + full_path.lstrip('/')
     else:
         path = os.path.join(CONTEXT, method, iso_name)
-    if kind not in ['FILE', 'DIR', 'BACK', 'ISO']:
-        raise ValueError(f'Kind must be FILE, DIR, BACK, or ISO, but is {kind}')
-    return { 'path': path, 'name': name, 'kind': kind }
+
+    # Add download link for ISO files
+    download_link = os.path.join(CONTEXT, 'download', iso_name + '.iso') if kind == 'ISO' else None
+
+    return {
+        'path': path,
+        'name': name,
+        'kind': kind,
+        'download_link': download_link
+    }
 
 def to_html(iso_name, files, file_path):
     folder = file_path.replace('path:', '')
-    head = f'''<html><head><title>Index of {folder}</title><style>body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }} .container {{ width: 80%; margin: auto; overflow: hidden; }} header {{ background: #333; color: #fff; padding-top: 30px; min-height: 70px; border-bottom: #77aaff 3px solid; }} header a {{ color: #fff; text-decoration: none; text-transform: uppercase; font-size: 16px; }} ul {{ list-style: none; padding: 0; }} ul li {{ background: #fff; margin: 5px 0; padding: 10px; border: #ccc 1px solid; }} ul li a {{ color: #333; text-decoration: none; }} ul li a:hover {{ color: #77aaff; }} hr {{ border: 0; height: 1px; background: #ccc; margin: 20px 0; }}</style></head>'''
+    head = (
+        f'''<html><head><title>Index of {folder}</title><style>'''
+        '''body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }'''
+        '''.container { width: 80%; margin: auto; overflow: hidden; }'''
+        '''header { background: #333; color: #fff; padding-top: 30px; min-height: 70px; border-bottom: #77aaff 3px solid; }'''
+        '''header a { color: #fff; text-decoration: none; text-transform: uppercase; font-size: 16px; }'''
+        '''ul { list-style: none; padding: 0; }'''
+        '''ul li { background: #fff; margin: 5px 0; padding: 10px; border: #ccc 1px solid; }'''
+        '''ul li a { color: #333; text-decoration: none; }'''
+        '''ul li a:hover { color: #77aaff; }'''
+        '''hr { border: 0; height: 1px; background: #ccc; margin: 20px 0; }'''
+        '''/* Styling for the download link */'''
+        '''.download-link { margin-left: 10px;  text-decoration: none; }'''
+        '''</style></head>'''
+    )
     head += '''<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">'''
     head += f'''<body><header><div class="container"><h1>ISO Directory Listing</h1></div></header><div class="container"><h2>{iso_name}</h2><h3>Index of {folder}</h3><hr/><ul>'''
+    
     body = ''
     for item in files:
         if folder != '/' or (folder == '/' and item['name'] not in ['../', './']):
@@ -35,7 +57,16 @@ def to_html(iso_name, files, file_path):
             fa_icon = 'fa-folder' if kind == 'DIR' else 'fa-compact-disc'
             fa_icon = 'fa-file' if kind == 'FILE' else fa_icon
             fa_icon = 'fa-turn-up' if kind == 'BACK' else fa_icon
-            body += f'<li><a href="{path}"><i class="fas {fa_icon} icon"></i> {name}</a></li>'
+            
+            # Add download link for ISO files with a download icon inside a button
+            download_link = item.get('download_link')
+            download_html = (
+                f' <a href="{download_link}" class="download-link" aria-label="Download {name}">'
+                f'<i class="fas fa-download"></i></a>'
+            ) if download_link else ''
+            
+            body += f'<li><a href="{path}"><i class="fas {fa_icon} icon"></i> {name}</a>{download_html}</li>'
+    
     bottom = '''</ul><hr /></div></body></html>'''
     return head + body + bottom
 
@@ -45,7 +76,10 @@ def list_isos_as_dict():
         for f in os.listdir(ISO_DIR):
             if f.endswith('.iso'):
                 iso_name = f.removesuffix('.iso')
-                files.append(to_dict('html', f, 'ISO', iso_name, '/'))
+                iso_dict = to_dict('html', f, 'ISO', iso_name, '')
+                logger.info(f"ISO File: {f}, ISO Name: {iso_name}, Dict: {iso_dict}")
+                files.append(iso_dict)
+        
         return files
     except Exception as e:
         logger.error(f"Error listing ISO files: {str(e)}")
@@ -58,7 +92,8 @@ def list_iso_contents_dict(iso_name, path='/'):
     try:
         files = []
         output = run_7z_command(iso_path)
-        path = path.replace("path:", "")
+        # No need to replace 'path:' anymore
+        # path = path.replace("path:", "")
         files_buffer = False
         add_up_directory_link(files, iso_name, path)
         for line in output:
@@ -140,7 +175,7 @@ def download_file(iso_name, file_path):
         result = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         def generate():
-            chunk_size = 8192  # Increase chunk size to 8 KB
+            chunk_size = 8192
             try:
                 for chunk in iter(lambda: result.stdout.read(chunk_size), b''):
                     yield chunk
@@ -171,6 +206,10 @@ def list_isos():
 @app.route(f'{CONTEXT}html/')
 def list_isos_as_html():
     return to_html('root', list_isos_as_dict(), 'ISOS')
+
+@app.route(f'{CONTEXT}')
+def redirect_to_html():
+    return redirect(f'{CONTEXT}html/')
 
 if __name__ == '__main__':
     logger.info(f' * ISO Directory: "{ISO_DIR}"')
