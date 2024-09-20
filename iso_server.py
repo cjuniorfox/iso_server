@@ -12,9 +12,9 @@ CONTEXT = os.environ.get('CONTEXT', '/')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def to_dict(method, name, kind, iso_name, full_path=''):
-    if full_path:
-        path = os.path.join(CONTEXT, method, iso_name) + '/path:' + full_path
+def to_dict(method, name, kind, iso_name, iso_fs_path=''):
+    if iso_fs_path:
+        path = os.path.join(CONTEXT, method, iso_name) + '/path:' + iso_fs_path
     else:
         path = os.path.join(CONTEXT, method, iso_name)
     if kind not in ['FILE', 'DIR', 'BACK', 'ISO']:
@@ -83,24 +83,24 @@ def run_7z_command(iso_path):
 
 def add_up_directory_link(files, iso_name, path):
     if path not in ['', '/']:
-        full_path = os.path.join(path, '..')
-        files.append(to_dict('html', 'Up one Directory', 'BACK', iso_name, full_path))
+        iso_fs_path = os.path.join(path, '..')
+        files.append(to_dict('html', 'Up one Directory', 'BACK', iso_name, iso_fs_path))
     else:
         files.append(to_dict('html', 'ISO Directory Listing', 'BACK', ''))
 
-def add_files(files, iso_name, path_look, dir_name, full_path, name):
+def add_files(files, iso_name, path_look, dir_name, iso_fs_path, name):
     if dir_name == path_look or dir_name == path_look.rstrip('/'):
-        files.append(to_dict('download', name, 'FILE', iso_name, full_path))
+        files.append(to_dict('download', name, 'FILE', iso_name, iso_fs_path))
 
 def process_line(line, files, iso_name, path):
     values = line.split()
     if len(values) == 6:
-        full_path = os.path.join('/', values[5])
+        iso_fs_path = os.path.join('/', values[5])
         name = os.path.basename(values[5])
-        dir_name = os.path.dirname(full_path)
+        dir_name = os.path.dirname(iso_fs_path)
         path_look = os.path.join('/', path)
         add_dirs(files, path_look, dir_name, iso_name)
-        add_files(files, iso_name, path_look, dir_name, full_path, name)
+        add_files(files, iso_name, path_look, dir_name, iso_fs_path, name)
 
 def add_dirs(files, path_look, dir_name, iso_name):
     len_look_dir = len(path_look.split('/')) - 1
@@ -109,8 +109,8 @@ def add_dirs(files, path_look, dir_name, iso_name):
         if len(split_dir) > len_look_dir:
             subdir = split_dir[len_look_dir]
             if subdir and subdir != files[-1]['name']:
-                full_path = os.path.join(path_look, subdir + '/')
-                files.append(to_dict('html', subdir, 'DIR', iso_name, full_path))
+                iso_fs_path = os.path.join(path_look, subdir + '/')
+                files.append(to_dict('html', subdir, 'DIR', iso_name, iso_fs_path))
 
 @app.route(f'{CONTEXT}json/<iso_name>')
 def list_root_contents(iso_name):
