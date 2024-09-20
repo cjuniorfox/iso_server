@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "2024-09-20T12:06:43Z"
+  labels:
+    app: iso-server
+  name: iso-server
+spec:
+  networks:
+    - name: ingress-net
+  containers:
+    - name: server
+      image: docker.io/cjuniorfox/iso_server
+      env:
+        - name: CONTEXT
+          value: /isos/
+        - name: ISO_PATH
+          value: /isos/
+      volumeMounts:
+        - mountPath: /isos
+          name: srv-image-host-0
+  restartPolicy: Always
+  volumes:
+    - name: srv-image-host-0
+      hostPath:
+        path: /srv/image
+        type: Directory
